@@ -1,22 +1,23 @@
 `timescale 1ns / 1ps
-   
+
 module traffic_light (
-    input wire clk,          // Clock input
-    input wire rst_n,        // Active low reset
+    input wire clk,            // Clock input
+    input wire rst_n,          // Active low reset
     input wire [5:0] red_time, // Time in seconds for red light
-    input wire [5:0] green_time, // Time in seconds for green light
-    output reg red,          // Red light output
-    output reg yellow,       // Yellow light output
-    output reg green         // Green light output
+    input wire [5:6] green_time, // Time in seconds for green light
+    output reg red,            // Red light output
+    output reg yellow,         // Yellow light output
+    output reg green,          // Green light output
+    output reg [5:0] counter   // Counter output for testbench
 );
 
-reg [5:0] counter;           // 6-bit counter to count seconds
 reg [1:0] state;             // State of the traffic light: 00 = Red, 01 = Green, 10 = Yellow
 
 // States
 localparam RED = 2'b00;
 localparam GREEN = 2'b01;
-localparam YELLOW = 2'b10;
+localparam RED_TO_YELLOW = 2'b10;
+localparam GREEN_TO_YELLOW = 2'b11;
 
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
@@ -29,25 +30,39 @@ always @(posedge clk or negedge rst_n) begin
     end else begin
         case (state)
             RED: begin
-                if (counter < red_time) begin
+                if (counter < red_time - 6'd5) begin
+                    counter <= counter + 1;
+                end else begin
+                    counter <= 6'd0;
+                    state <= RED_TO_YELLOW;
+                end
+                // Red light is on
+                red <= 1;
+                // Yellow light is off
+                yellow <= 0;
+                // Green light is off
+                green <= 0;
+            end
+            RED_TO_YELLOW: begin
+                if (counter < 6'd5) begin
                     counter <= counter + 1;
                 end else begin
                     counter <= 6'd0;
                     state <= GREEN;
                 end
                 // Red light is on
-                red <= 1;
-                // Yellow light is on in the last 5 seconds of the red period
-                yellow <= (counter >= red_time - 6'd5);
+                red <= 0;
+                // Yellow light is on
+                yellow <= 1;
                 // Green light is off
                 green <= 0;
             end
             GREEN: begin
-                if (counter < green_time) begin
+                if (counter < green_time - 6'd5) begin
                     counter <= counter + 1;
                 end else begin
                     counter <= 6'd0;
-                    state <= YELLOW;
+                    state <= GREEN_TO_YELLOW;
                 end
                 // Red light is off
                 red <= 0;
@@ -56,7 +71,7 @@ always @(posedge clk or negedge rst_n) begin
                 // Green light is on
                 green <= 1;
             end
-            YELLOW: begin
+            GREEN_TO_YELLOW: begin
                 if (counter < 6'd5) begin
                     counter <= counter + 1;
                 end else begin
@@ -76,14 +91,16 @@ end
 
 endmodule 
 
+
 module testbench;
-    reg clk;             // ورودی کلاک برای تست بنچ
-    reg rst_n;           // ورودی ریست برای تست بنچ
-    reg [5:0] red_time;  // زمان قرمز بودن چراغ برای تست بنچ
-    reg [5:0] green_time;  // زمان سبز بودن چراغ برای تست بنچ
-    wire red;            // خروجی چراغ قرمز برای تست بنچ
-    wire yellow;         // خروجی چراغ زرد برای تست بنچ
-    wire green;          // خروجی چراغ سبز برای تست بنچ
+    reg clk;               // Clock input for testbench
+    reg rst_n;             // Reset input for testbench
+    reg [5:0] red_time;    // Red light duration for testbench
+    reg [5:0] green_time;  // Green light duration for testbench
+    wire red;              // Red light output for testbench
+    wire yellow;           // Yellow light output for testbench
+    wire green;            // Green light output for testbench
+    wire [5:0] counter;    // Counter output for testbench
 
     // Instantiate the traffic_light module
     traffic_light uut (
@@ -93,7 +110,8 @@ module testbench;
         .green_time(green_time),
         .red(red),
         .yellow(yellow),
-        .green(green)
+        .green(green),
+        .counter(counter)
     );
 
     // Clock generation
@@ -105,20 +123,20 @@ module testbench;
     // Test sequence
     initial begin
         // Initialize inputs
-        rst_n = 0;           // تنظیم ریست به حالت فعال (پایین)
-        red_time = 6'd20;    // تنظیم زمان قرمز به 20 ثانیه
-        green_time = 6'd15;  // تنظیم زمان سبز به 15 ثانیه
+        rst_n = 0;             // Set reset to active (low)
+        red_time = 6'd20;      // Set red light duration to 20 seconds
+        green_time = 6'd15;    // Set green light duration to 15 seconds
 
         // Apply reset
-        #10 rst_n = 1;       // بعد از 10 واحد زمانی، ریست غیر فعال می‌شود (بالا می‌رود)
+        #10 rst_n = 1;         // After 10 time units, deactivate reset (set high)
 
         // Run for a certain amount of time to observe behavior
-        #1000 $stop;          // توقف شبیه‌سازی بعد از 1000 واحد زمانی
+        #1000 $stop;           // Stop simulation after 1000 time units
     end
 
     // Monitor the outputs
     initial begin
-        $monitor("At time %t: red = %b, yellow = %b, green = %b", $time, red, yellow, green);
-        // نمایش مقادیر خروجی‌ها در زمان‌های مختلف شبیه‌سازی
+        $monitor("At time %t: red = %b, yellow = %b, green = %b, counter = %d", $time, red, yellow, green, counter);
+        // Display output values at different times during simulation
     end
 endmodule
